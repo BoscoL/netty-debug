@@ -15,11 +15,11 @@
  */
 package io.netty.channel;
 
-import static io.netty.util.internal.ObjectUtil.checkPositive;
-
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufAllocator;
 import io.netty.util.UncheckedBooleanSupplier;
+
+import static io.netty.util.internal.ObjectUtil.checkPositive;
 
 /**
  * Default implementation of {@link MaxMessagesRecvByteBufAllocator} which respects {@link ChannelConfig#isAutoRead()}
@@ -92,12 +92,28 @@ public abstract class DefaultMaxMessagesRecvByteBufAllocator implements MaxMessa
      */
     public abstract class MaxMessageHandle implements ExtendedHandle {
         private ChannelConfig config;
+
+        // 每次读的最大消息数，默认16次，没读完，下次select接着读。
         private int maxMessagePerRead;
+
+        // 已读总消息数
         private int totalMessages;
+
+        // 已读总字节数
         private int totalBytesRead;
+
+        // 尝试读取的字节数，默认是ByteBuf的可写字节数，即尽量把ByteBuf填满。
         private int attemptedBytesRead;
+
+        // 上次读取的字节数，根据它调整下次分配的缓冲区大小。
         private int lastBytesRead;
+
         private final boolean respectMaybeMoreData = DefaultMaxMessagesRecvByteBufAllocator.this.respectMaybeMoreData;
+
+         /*
+          * 判断是否还有更多数据可读的默认判断:attemptedBytesRead == lastBytesRead。
+          * 即:本次读取的数据有没有填满ByteBuf，如果填满了，说明可能还有数据要读。否则就不读了，直接触发ChannelReadComplete()。
+          */
         private final UncheckedBooleanSupplier defaultMaybeMoreSupplier = new UncheckedBooleanSupplier() {
             @Override
             public boolean get() {
@@ -108,6 +124,7 @@ public abstract class DefaultMaxMessagesRecvByteBufAllocator implements MaxMessa
         /**
          * Only {@link ChannelConfig#getMaxMessagesPerRead()} is used.
          */
+        // 根据config重置数据，每次处理新的Read事件时触发。
         @Override
         public void reset(ChannelConfig config) {
             this.config = config;
@@ -138,11 +155,17 @@ public abstract class DefaultMaxMessagesRecvByteBufAllocator implements MaxMessa
             return lastBytesRead;
         }
 
+        // 是否还要继续循环读取消息
         @Override
         public boolean continueReading() {
             return continueReading(defaultMaybeMoreSupplier);
         }
 
+        /*
+         * 判断依据:
+         *  1.认为还有可读数据；
+         *  2.读取的消息数没有达到上限。
+         */
         @Override
         public boolean continueReading(UncheckedBooleanSupplier maybeMoreDataSupplier) {
             return config.isAutoRead() &&

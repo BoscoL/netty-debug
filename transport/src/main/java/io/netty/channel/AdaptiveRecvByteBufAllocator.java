@@ -127,6 +127,9 @@ public class AdaptiveRecvByteBufAllocator extends DefaultMaxMessagesRecvByteBufA
             return nextReceiveBufferSize;
         }
 
+        /*
+         * 根据实际读取到的字节数，自适应调整下次读操作分配的缓冲区大小
+         */
         private void record(int actualReadBytes) {
             if (actualReadBytes <= SIZE_TABLE[max(0, index - INDEX_DECREMENT)]) {
                 if (decreaseNow) {
@@ -143,15 +146,18 @@ public class AdaptiveRecvByteBufAllocator extends DefaultMaxMessagesRecvByteBufA
             }
         }
 
+        // 数据读取完毕，根据本次读取的总字节数，自适应调整下次应该分配的缓冲区大小
         @Override
         public void readComplete() {
             record(totalBytesRead());
         }
     }
 
+    // 最小、默认、最大容量在SIZE_TABLE中的下标
     private final int minIndex;
     private final int maxIndex;
     private final int initialIndex;
+
     private final int minCapacity;
     private final int maxCapacity;
 
@@ -160,6 +166,7 @@ public class AdaptiveRecvByteBufAllocator extends DefaultMaxMessagesRecvByteBufA
      * parameters, the expected buffer size starts from {@code 1024}, does not
      * go down below {@code 64}, and does not go up above {@code 65536}.
      */
+    // 根据默认值创建一个:自适应接受缓冲区分配器:64、2048、65535
     public AdaptiveRecvByteBufAllocator() {
         this(DEFAULT_MINIMUM, DEFAULT_INITIAL, DEFAULT_MAXIMUM);
     }

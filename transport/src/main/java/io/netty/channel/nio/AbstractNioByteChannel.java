@@ -139,35 +139,51 @@ public abstract class AbstractNioByteChannel extends AbstractNioChannel {
                 return;
             }
             final ChannelPipeline pipeline = pipeline();
+
+            // 默认为：PooledByteBufAllocator，可通过参数指定：io.netty.allocator.type，候选值为：unpooled，pooled，adaptive
             final ByteBufAllocator allocator = config.getAllocator();
+
+            // 默认为：AdaptiveRecvByteBufAllocator$HandleImpl，着重看接口：MaxMessagesRecvByteBufAllocator的实现类。
             final RecvByteBufAllocator.Handle allocHandle = recvBufAllocHandle();
+
+            // 重置统计信息
             allocHandle.reset(config);
 
             ByteBuf byteBuf = null;
             boolean close = false;
             try {
                 do {
+                    // 分配缓冲区
                     byteBuf = allocHandle.allocate(allocator);
+
+                    // 从Channel中读取数据写入至byteBuf，然后allocHandle根据最近一次读取的字节数调整下一次接收数据的byteBuf的容量。
                     allocHandle.lastBytesRead(doReadBytes(byteBuf));
+
                     if (allocHandle.lastBytesRead() <= 0) {
-                        // nothing was read. release the buffer.
-                        byteBuf.release();
-                        byteBuf = null;
-                        close = allocHandle.lastBytesRead() < 0;
+                        // 没有读取到数据
+                        byteBuf.release(); // 释放缓冲区
+                        byteBuf = null; // 待GC回收
+                        close = allocHandle.lastBytesRead() < 0; // 是否EOF
                         if (close) {
                             // There is nothing left to read as we received an EOF.
-                            readPending = false;
+                            readPending = false; // 读操作在此已完毕。
                         }
                         break;
                     }
 
+                    // 递增已经读取的消息数量
                     allocHandle.incMessagesRead(1);
                     readPending = false;
+
+                    // 通过pipeline传播ChannelRead事件
                     pipeline.fireChannelRead(byteBuf);
                     byteBuf = null;
-                } while (allocHandle.continueReading());
+                } while (allocHandle.continueReading()); // 判断是否需要继续读
 
+                // 读完成处理，如果是AdaptiveRecvByteBufAllocator，则根据读取到的字节数调整下一次分配的ByteBuf的容量。
                 allocHandle.readComplete();
+
+                //  通过pipeline传播ReadComplete事件
                 pipeline.fireChannelReadComplete();
 
                 if (close) {
@@ -183,7 +199,7 @@ public abstract class AbstractNioByteChannel extends AbstractNioChannel {
                 //
                 // See https://github.com/netty/netty/issues/2254
                 if (!readPending && !config.isAutoRead()) {
-                    removeReadOp();
+                    removeReadOp(); // 移除SelectionKey.OP_READ操作关注。
                 }
             }
         }
